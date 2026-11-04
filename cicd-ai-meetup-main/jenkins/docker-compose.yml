@@ -1,0 +1,19 @@
+# הרצה (מתוך תיקיית jenkins):  docker compose up -d --build
+# כניסה: http://localhost:8080   משתמשת: admin   סיסמה: admin
+services:
+  jenkins:
+    build: .
+    image: meetup-jenkins:local
+    container_name: meetup-jenkins
+    ports:
+      - "8080:8080"
+    environment:
+      # ברירת מחדל: הריפו המקומי שלך (חייב commit, לא חייב push).
+      # כדי לעבוד מול GitHub: צרי קובץ .env עם REPO_URL=https://github.com/<user>/<repo>.git
+      REPO_URL: ${REPO_URL:-file:///repo}
+    volumes:
+      - ..:/repo:ro
+      - jenkins_home:/var/jenkins_home
+
+volumes:
+  jenkins_home:

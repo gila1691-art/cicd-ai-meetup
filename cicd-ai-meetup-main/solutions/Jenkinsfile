@@ -1,0 +1,61 @@
+// פתרון לתרגיל 5 — להעתיק לשורש הריפו במקום ה-Jenkinsfile ההתחלתי
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        timeout(time: 10, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    environment {
+        CI = 'true'
+    }
+
+    stages {
+        stage('Install') {
+            steps {
+                sh 'node --version && npm --version'
+                sh 'npm ci'
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh 'npm run lint'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'npm run test:ci'
+            }
+            post {
+                always {
+                    junit 'reports/junit.xml'
+                }
+            }
+        }
+
+        // עובר רק אחרי תרגיל 3 (בדיקות לקופונים). לפני כן — מחקו/הוסיפו הערה לשלב הזה.
+        stage('Coverage') {
+            steps {
+                sh 'npm run coverage'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build #${env.BUILD_NUMBER} עבר בהצלחה"
+        }
+        failure {
+            echo "❌ Build #${env.BUILD_NUMBER} נכשל — ${env.BUILD_URL}console"
+            // כאן אפשר לשלוח הודעה ל-Slack/Teams/Discord, למשל:
+            // sh 'curl -s -X POST -H "Content-Type: application/json" -d "{\\"text\\":\\"build failed\\"}" "$WEBHOOK_URL"'
+        }
+        always {
+            cleanWs(deleteDirs: true, notFailBuild: true)
+        }
+    }
+}

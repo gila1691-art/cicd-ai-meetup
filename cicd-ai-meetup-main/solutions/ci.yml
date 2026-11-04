@@ -1,0 +1,85 @@
+# פתרון לדוגמה לתרגילים 1+4 — להעתיק ל- .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# ריצה חדשה על אותו branch מבטלת את הקודמת
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run test:ci
+      # תרגיל 3: אחרי שה-AI כתב בדיקות לקופונים — להסיר את ההערה (שער כיסוי 90%)
+      # - run: npm run coverage
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-node-${{ matrix.node }}
+          path: reports/
+
+  notify:
+    needs: [lint, test]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      RESULT: ${{ (needs.lint.result == 'success' && needs.test.result == 'success') && 'success' || 'failure' }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Job summary
+        run: |
+          if [ "$RESULT" = "success" ]; then ICON="✅"; else ICON="❌"; fi
+          {
+            echo "## $ICON Coffee Break CI"
+            echo ""
+            echo "| שלב | תוצאה |"
+            echo "|---|---|"
+            echo "| Lint | ${{ needs.lint.result }} |"
+            echo "| Test | ${{ needs.test.result }} |"
+            echo ""
+            echo "commit: \`${GITHUB_SHA::7}\` by @${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # אופציונלי: הוסיפו Secret בשם WEBHOOK_URL (Slack / Discord / Teams)
+      - name: Send chat notification
+        if: env.WEBHOOK_URL != ''
+        run: |
+          if [ "$RESULT" = "success" ]; then ICON="✅"; else ICON="❌"; fi
+          MSG="$ICON CI on ${{ github.repository }} (${GITHUB_REF_NAME}) finished: $RESULT — $RUN_URL"
+          # text = Slack/Teams, content = Discord
+          jq -n --arg m "$MSG" '{text: $m, content: $m}' \
+            | curl -sS -f -X POST -H 'Content-Type: application/json' -d @- "$WEBHOOK_URL"

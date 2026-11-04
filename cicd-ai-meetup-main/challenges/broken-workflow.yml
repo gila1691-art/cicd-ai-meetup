@@ -1,0 +1,29 @@
+# תרגיל 2 — "הפייפליין של השכנה"
+# הקובץ הזה שבור בכמה מקומות. כל תיקון יחשוף את התקלה הבאה.
+# 1. העתיקו אותו ל- .github/workflows/broken.yml
+# 2. עשו commit ותראו מה קורה בלשונית Actions
+# 3. הדביקו את הודעת השגיאה ל-AI ובקשו הסבר + תיקון
+# 4. חזרו על זה עד שהריצה ירוקה
+
+name: Broken CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    run-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v9
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+         run: npm run tests

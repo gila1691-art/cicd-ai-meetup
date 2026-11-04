@@ -1,0 +1,42 @@
+# Jenkins Configuration as Code — כל ההגדרות של Jenkins בקובץ אחד
+jenkins:
+  systemMessage: "מיטאפ CI/CD + AI — Jenkins מקומי לתרגול"
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: admin
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: http://localhost:8080/
+
+jobs:
+  - script: |
+      pipelineJob('coffee-break-ci') {
+        description('מריץ את ה-Jenkinsfile שבשורש הריפו')
+        properties {
+          pipelineTriggers {
+            triggers {
+              pollSCM { scmpoll_spec('* * * * *') }
+            }
+          }
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('${REPO_URL}') }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }

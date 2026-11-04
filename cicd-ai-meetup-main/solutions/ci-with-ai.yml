@@ -1,0 +1,69 @@
+# בונוס — AI בתוך הפייפליין: כשהבדיקות נכשלות, שולחים את הלוג ל-Claude
+# ומקבלים הסבר + הצעת תיקון בתוך ה-Job Summary.
+#
+# הגדרה:
+#   Settings → Secrets and variables → Actions
+#     Secret:   ANTHROPIC_API_KEY
+#     Variable: ANTHROPIC_MODEL  (לא חובה; בדקו את שם המודל העדכני ב-docs.claude.com)
+#
+# שימו לב: הלוג נשלח לשירות חיצוני. בפרויקט אמיתי — לוודא שאין בו סודות/מידע רגיש.
+name: CI with AI triage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-sonnet-4-5' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Lint + Test (log saved to file)
+        shell: bash
+        run: |
+          set -o pipefail
+          { npm run lint && npm run test:ci; } 2>&1 | tee ci-output.log
+
+      - name: Ask AI why it failed
+        if: failure() && env.ANTHROPIC_API_KEY != ''
+        shell: bash
+        run: |
+          LOG=$(tail -c 12000 ci-output.log)
+          CODE=$(cat src/pricing.js)
+          PROMPT="אתה מהנדס/ת DevOps בכיר/ה. ה-build נכשל. הסבר/י בקצרה (בעברית) מה הסיבה, \
+          ותן/י תיקון מדויק כ-diff. אם הבדיקה שגויה ולא הקוד — אמור/אמרי זאת.
+
+          ### CI log
+          $LOG
+
+          ### src/pricing.js
+          $CODE"
+
+          jq -n --arg model "$ANTHROPIC_MODEL" --arg p "$PROMPT" \
+            '{model: $model, max_tokens: 1200, messages: [{role: "user", content: $p}]}' > req.json
+
+          curl -sS -f https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d @req.json > resp.json
+
+          {
+            echo "## 🤖 AI triage"
+            echo ""
+            jq -r '.content[0].text' resp.json
+          } >> "$GITHUB_STEP_SUMMARY"
