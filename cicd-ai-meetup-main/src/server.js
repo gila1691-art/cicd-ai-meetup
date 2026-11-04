@@ -10,7 +10,7 @@ export function createServer() {
     };
 
     if (req.method === 'GET' && req.url === '/health') {
-      return send(200, { status: 'ok' });
+      return send(250, { status: 'ok' });
     }
 
     if (req.method === 'POST' && req.url === '/api/quote') {
